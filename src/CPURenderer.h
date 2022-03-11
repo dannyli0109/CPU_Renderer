@@ -35,6 +35,7 @@ private:
 	GLuint quadBuffer;
 	ShaderProgram* shader;
 	std::vector<glm::vec4> frameBuffer;
+	std::vector<float> depthBuffer;
 	unsigned int bufferCount = 0;
 	unsigned int activeVertexBuffer = 0;
 	unsigned int activeIndexBuffer = 0;
@@ -50,5 +51,10 @@ private:
 	void InitQuad();
 	void SetPixel(int x, int y, glm::vec4 color);
 	unsigned int GenerateBuffer();
+	glm::vec3 ComputeBarycentric2D(glm::vec3 position, std::vector<glm::vec3>& v);
+	bool PointInTriangle(glm::vec3 p, std::vector<glm::vec3>& v);
+	void Resterise(std::vector<Vertex>& v);
+	int GetCoordinate(int x, int y);
+
 
 };

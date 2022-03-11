@@ -50,7 +50,7 @@ glm::mat4 GetProjectionMatrix(float eye_fov, float aspect_ratio,
     glm::mat4 orthoTranslate(1.0f);
     glm::mat4 orthoLinear;
 
-    orthoLinear[0] = { 2.0f / (r - l), 0,              0,              0 };
+    orthoLinear[0] = { 2.0f / (l - r), 0,              0,              0 };
     orthoLinear[1] = { 0,              2.0f / (t - b), 0,              0 };
     orthoLinear[2] = { 0,              0,              2.0f / (n - f), 0 };
     orthoLinear[3] = { 0,              0,              0,              1 };
@@ -95,24 +95,27 @@ void Program::Update()
     CPURenderer* r = CPURenderer::GetInstance();
 
     unsigned int indexBuffer = r->UploadVertices({
-        Vertex({{2, 0, -2}, {1, 1, 1, 1}}),
-        Vertex({{0, 2, -2}, {1, 1, 1, 1}}),
-        Vertex({{-2, 0, -2}, {1, 1, 1, 1}})
+        Vertex({{2, 0, -2, 1}, {217.0 / 255.0, 238.0 / 255.0, 185.0 / 255.0, 1}}),
+        Vertex({{0, 2, -2, 1}, {217.0 / 255.0, 238.0 / 255.0, 185.0 / 255.0, 1}}),
+        Vertex({{-2, 0, -2, 1}, {217.0 / 255.0, 238.0 / 255.0, 185.0 / 255.0, 1}}),
+        Vertex({{3.5, -1, -5, 1}, {185.0 / 255.0, 217.0 / 255.0, 238.0 / 255.0, 1}}),
+        Vertex({{2.5, 1.5, -5, 1}, {185.0 / 255.0, 217.0 / 255.0, 238.0 / 255.0, 1}}),
+        Vertex({{-1, 0.5, -5, 1}, {185.0 / 255.0, 217.0 / 255.0, 238.0 / 255.0, 1}})
     });
 
     unsigned int vertexBuffer = r->UploadIndices({
-        0, 1, 2
-    });
+        0, 1, 2, 3, 4, 5
+        });
 
     r->SetUniform("modelMatrix", GetModelMatrix(0));
-    r->SetUniform("viewMatrix", GetViewMatrix({0, 0, 5}));
+    r->SetUniform("viewMatrix", GetViewMatrix({ 0, 0, 5 }));
     r->SetUniform("projectionMatrix", GetProjectionMatrix(45, 1, 0.1, 50));
 
     while (!glfwWindowShouldClose(window))
     {
         //Clear the screen ?eventually do rendering code here.
         glClear(GL_COLOR_BUFFER_BIT);
-        
+
         Draw();
 
         //Swapping the buffers ?this means this frame is over.
