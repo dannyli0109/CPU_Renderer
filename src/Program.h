@@ -2,6 +2,8 @@
 #include "Graphics.h"
 #include "GUI.h"
 #include "CPURenderer.h"
+#include "Utilities.h"
+#include "Texture.h"
 class Program
 {
 public:
@@ -16,4 +18,5 @@ private:
 	CPURenderer* renderer;
 	
 	GLFWwindow* window;
+	glm::vec2 viewportSize;
 };

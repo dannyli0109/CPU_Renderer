@@ -54,6 +54,12 @@
     <ClCompile Include="src\Utilities.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\Texture.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\Shader.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="lib\glad\glad.h">
@@ -111,6 +117,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\Renderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Shader.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\Texture.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

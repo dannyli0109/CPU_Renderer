@@ -71,26 +71,30 @@ bool CPURenderer::PointInTriangle(glm::vec3 p, std::vector<glm::vec3>& v)
 		if (cross.z > 0) allNegative = false;
 	}
 	if (allPositive || allNegative) return true;
+	return false;
 }
 
-void CPURenderer::Resterise(std::vector<Vertex>& v)
+void CPURenderer::Resterise(std::vector<VertexShaderPayload>& payloads)
 {
 	float minX = INFINITY, minY = INFINITY, maxX = -INFINITY, maxY = -INFINITY;
-	for (int i = 0; i < v.size(); i++)
+	std::vector<glm::vec3> positions = { payloads[0].position, payloads[1].position, payloads[2].position};
+	for (int i = 0; i < positions.size(); i++)
 	{
-		glm::vec3 pos = v[i].position;
+		glm::vec3 pos = positions[i];
 		if (minX > pos.x) minX = pos.x;
 		if (minY > pos.y) minY = pos.y;
 		if (maxX < pos.x) maxX = pos.x;
 		if (maxY < pos.y) maxY = pos.y;
 	}
 
-	std::vector<glm::vec3> positions = { v[0].position, v[1].position, v[2].position };
 	for (int y = minY; y <= maxY; y++)
 	{
 		for (int x = minX; x <= maxX; x++)
 		{
-			glm::vec3 p = { x + 0.5, y + 0.5, 1 };
+			if (x < 0 || y < 0) continue;
+			if (x >= w || y >= h) continue;
+			glm::vec3 p = { x + 0.5f, y + 0.5f, 1.0f };
+			//std::cout << positions[0].x << ", " << positions[0].y << std::endl;
 			if (PointInTriangle(p, positions))
 			{
 				glm::vec3 baryCentric = ComputeBarycentric2D(p, positions);
@@ -98,14 +102,79 @@ void CPURenderer::Resterise(std::vector<Vertex>& v)
 				float beta = baryCentric.y;
 				float gamma = baryCentric.z;
 
-				float w_reciprocal = 1.0 / (alpha / v[0].position.w + beta / v[1].position.w + gamma / v[2].position.w);
-				float z_interpolated = alpha * v[0].position.z / v[0].position.w + beta * v[1].position.z / v[1].position.w + gamma * v[2].position.z / v[2].position.w;
+				float z1 = payloads[0].position.z;
+				float z2 = payloads[1].position.z;
+				float z3 = payloads[2].position.z;
+
+				float w1 = payloads[0].position.w;
+				float w2 = payloads[1].position.w;
+				float w3 = payloads[2].position.w;
+
+				float wReciprocal = 1.0f / alpha / w1 + beta / w2 + gamma / w3;;
+				float zInterpolated = 
+					alpha * z1 / w1 +
+					beta * z2 / w2 +
+					gamma * z3 / w3;
+				//zInterpolated *= wReciprocal;
 
 				int index = GetCoordinate(std::floor(p.x), std::floor(p.y));
-				if (z_interpolated < depthBuffer[index])
+				if (zInterpolated < depthBuffer[index])
 				{
-					depthBuffer[index] = z_interpolated;
-					SetPixel(std::floor(p.x), std::floor(p.y), v[0].color);
+					depthBuffer[index] = zInterpolated;
+
+					glm::vec4 c1 = payloads[0].color;
+					glm::vec4 c2 = payloads[1].color;
+					glm::vec4 c3 = payloads[2].color;
+
+					//glm::vec3 n1 = payloads[0].out.vertexNormal;
+					//glm::vec3 n2 = payloads[1].out.vertexNormal;
+					//glm::vec3 n3 = payloads[2].out.vertexNormal;
+
+					glm::vec3 n1 = payloads[0].out.vertexNormal;
+					glm::vec3 n2 = payloads[1].out.vertexNormal;
+					glm::vec3 n3 = payloads[2].out.vertexNormal;
+
+					glm::mat3 tbn1 = payloads[0].out.tbn;
+					glm::mat3 tbn2 = payloads[1].out.tbn;
+					glm::mat3 tbn3 = payloads[2].out.tbn;
+
+
+					/*glm::vec3 t1 = payloads[0].out.tbn[0];
+					glm::vec3 t2 = payloads[0].out.tbn[0];
+					glm::vec3 t3 = payloads[0].out.tbn[0];*/
+
+
+					glm::vec2 uv1 = payloads[0].texCoords;
+					glm::vec2 uv2 = payloads[1].texCoords;
+					glm::vec2 uv3 = payloads[2].texCoords;
+
+					glm::vec3 p1 = positions[0];
+					glm::vec3 p2 = positions[1];
+					glm::vec3 p3 = positions[2];
+
+					glm::vec3 mp1 = payloads[0].out.modelPos;
+					glm::vec3 mp2 = payloads[1].out.modelPos;
+					glm::vec3 mp3 = payloads[2].out.modelPos;
+
+					glm::vec3 color = Interpolate(alpha, beta, gamma, c1, c2, c3, w1, w2, w3);
+					glm::vec3 normal = Interpolate(alpha, beta, gamma, n1, n2, n3, w1, w2, w3);
+	/*				normal.x = normal.x * 0.5f + 0.5f;
+					normal.y = normal.y * 0.5f + 0.5f;
+					normal.z = normal.z * 0.5f + 0.5f;*/
+					normal = glm::normalize(normal);
+
+					glm::vec2 uv = Interpolate(alpha, beta, gamma, glm::vec3(uv1, 0), glm::vec3(uv2, 0), glm::vec3(uv3, 0), w1, w2, w3);
+					glm::vec3 position = Interpolate(alpha, beta, gamma, p1, p2, p3, w1, w2, w3);
+					glm::vec3 modelPos = Interpolate(alpha, beta, gamma, mp1, mp2, mp3, w1, w2, w3);
+					glm::mat3 tbn = Interpolate(alpha, beta, gamma, tbn1, tbn2, tbn3, w1, w2, w3);
+
+
+					FragmentShaderPayload payload(position, color, normal, uv);
+					payload.tbn = tbn;
+					//payload.tbn = payloads[]
+					payload.modelPos = modelPos;
+					glm::vec3 fragColor = fragmentShader(this, payload);
+					SetPixel(std::floor(p.x), std::floor(p.y), glm::vec4(fragColor, 1));
 				}
 			}
 		}
@@ -115,6 +184,19 @@ void CPURenderer::Resterise(std::vector<Vertex>& v)
 int CPURenderer::GetCoordinate(int x, int y)
 {
 	return y * w + x;
+}
+
+glm::vec3 CPURenderer::Interpolate(float alpha, float beta, float gamma, glm::vec3 v1, glm::vec3 v2, glm::vec3 v3, float w1, float w2, float w3)
+{
+	return (alpha * v1 / w1 + beta * v2 / w2 + gamma * v3 / w3);
+}
+
+glm::mat3 CPURenderer::Interpolate(float alpha, float beta, float gamma, glm::mat3 m1, glm::mat3 m2, glm::mat3 m3, float w1, float w2, float w3)
+{
+	glm::vec3 t = Interpolate(alpha, beta, gamma, m1[0], m2[0], m3[0], w1, w2, w3);
+	glm::vec3 b = Interpolate(alpha, beta, gamma, m1[1], m2[1], m3[1], w1, w2, w3);
+	glm::vec3 n = Interpolate(alpha, beta, gamma, m1[2], m2[2], m3[2], w1, w2, w3);
+	return { t, b, n };
 }
 
 void CPURenderer::BindVertexBuffer(unsigned int id)
@@ -136,6 +218,25 @@ void CPURenderer::UnbindIndexBuffer()
 {
 	activeIndexBuffer = 0;
 }
+
+void CPURenderer::BindTextureUint(unsigned int textureUint, unsigned int textureId)
+{
+	textureUints[textureUint] = textureId;
+}
+
+Texture* CPURenderer::GetTexture(std::string s)
+{
+	unsigned int textureUnit = uniform1i[s];
+	unsigned int textureId = textureUints[textureUnit];
+	return textureMap[textureId];
+}
+
+void CPURenderer::SetClippingPlane(float near, float far)
+{
+	n = near;
+	f = far;
+}
+
 
 void CPURenderer::DrawLine(glm::vec3 p1, glm::vec3 p2, glm::vec4 color)
 {
@@ -184,32 +285,36 @@ void CPURenderer::Draw()
 	shader->UseProgram();
 	std::vector<Vertex>& vertices = verticesMap[activeVertexBuffer];
 	std::vector<unsigned short>& indices = indicesMap[activeIndexBuffer];
-	glm::mat4 model = uniformM4["modelMatrix"];
-	glm::mat4 view = uniformM4["viewMatrix"];
-	glm::mat4 projection = uniformM4["projectionMatrix"];
+	glm::mat4 model = uniform4fM["modelMatrix"];
+	glm::mat4 view = uniform4fM["viewMatrix"];
+	glm::mat4 projection = uniform4fM["projectionMatrix"];
 	glm::mat4 mvp = projection * view * model;
-	float f1 = (100 - 0.1) / 2.0;
-	float f2 = (100 + 0.1) / 2.0;
+	float f1 = (f - n) / 2.0;
+	float f2 = (f + n) / 2.0;
 	for (int i = 0; i < indices.size() / 3; i++)
 	{
 		unsigned short i0 = indices[i * 3];
 		unsigned short i1 = indices[i * 3 + 1];
 		unsigned short i2 = indices[i * 3 + 2];
-		std::vector<Vertex> v = { vertices[i0], vertices[i1], vertices[i2] };
+		std::vector<unsigned short> ind = { i0, i1, i2 };
+		std::vector<VertexShaderPayload> payloads;
 		for (int j = 0; j < 3; j++)
 		{
-			glm::vec4 v4 = mvp * v[j].position;
-			v[j].position = v4 / v4.w;
-			v[j].position.x = 0.5f * w * (v[j].position.x + 1.0f);
-			v[j].position.y = 0.5f * h * (v[j].position.y + 1.0f);
-			v[j].position.z = v[j].position.z * f1 + f2;
+			Vertex vertex = vertices[ind[j]];
+			VertexShaderPayload payload(vertex);
+			glm::vec4 v4 = vertexShader(this, payload);
+			payload.position = v4 / v4.w;
+			payload.position.x = 0.5f * w * (payload.position.x + 1.0f);
+			payload.position.y = 0.5f * h * (payload.position.y + 1.0f);
+			payload.position.z = payload.position.z * f1 + f2;
+			payloads.push_back(payload);
 		}
-		Resterise(v);
+		Resterise(payloads);
 	}
 	UpdateTexture();
 }
 
-unsigned int CPURenderer::UploadVertices(const std::vector<Vertex>&& vertexData)
+unsigned int CPURenderer::UploadVertices(const std::vector<Vertex>& vertexData)
 {
 	unsigned int buffer = GenerateBuffer();
 	BindVertexBuffer(buffer);
@@ -218,7 +323,7 @@ unsigned int CPURenderer::UploadVertices(const std::vector<Vertex>&& vertexData)
 	return buffer;
 }
 
-unsigned int CPURenderer::UploadIndices(const std::vector<unsigned short>&& indexData)
+unsigned int CPURenderer::UploadIndices(const std::vector<unsigned short>& indexData)
 {
 	unsigned int buffer = GenerateBuffer();
 	BindIndexBuffer(buffer);
@@ -227,10 +332,43 @@ unsigned int CPURenderer::UploadIndices(const std::vector<unsigned short>&& inde
 	return buffer;
 }
 
+unsigned int CPURenderer::UploadTexture(Texture* texture)
+{
+	unsigned int buffer = GenerateBuffer();
+	textureMap[buffer] = texture;
+	return buffer;
+}
+
 void CPURenderer::SetUniform(std::string s, glm::mat4 m)
 {
-	uniformM4[s] = m;
+	uniform4fM[s] = m;
 }
+
+void CPURenderer::SetUniform(std::string s, int i)
+{
+	uniform1i[s] = i;
+}
+
+void CPURenderer::SetUniform(std::string s, glm::vec3 v)
+{
+	uniform3fv[s] = v;
+}
+
+glm::mat4 CPURenderer::GetUniform4fM(std::string s)
+{
+	return uniform4fM[s];
+}
+
+int CPURenderer::GetUnform1i(std::string s)
+{
+	return uniform1i[s];
+}
+
+glm::vec3 CPURenderer::GetUnform3fv(std::string s)
+{
+	return uniform3fv[s];
+}
+
 
 CPURenderer::~CPURenderer()
 {

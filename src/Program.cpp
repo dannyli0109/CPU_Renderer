@@ -1,4 +1,5 @@
 #include "Program.h"
+#include <string>
 constexpr double MY_PI = 3.1415926;
 
 glm::mat4 GetViewMatrix(glm::vec3 eyePos)
@@ -13,16 +14,22 @@ glm::mat4 GetViewMatrix(glm::vec3 eyePos)
 
 glm::mat4 GetModelMatrix(float rotation_angle)
 {
-    glm::mat4 model(1.0f);
+    glm::mat4 rotation(1.0f);
     float c = cos((rotation_angle * MY_PI) / 180.0f);
     float s = sin((rotation_angle * MY_PI) / 180.0f);
 
-    model[0] = { c, s, 0, 0 };
-    model[1] = { -s, c, 0, 0 };
-    model[2] = { 0, 0, 1.0f, 0 };
-    model[3] = { 0, 0, 0, 1.0f };
+    rotation[0] = { c, 0, -s, 0 };
+    rotation[1] = { 0, 1.0f, 0, 0 };
+    rotation[2] = { s, 0, c, 0 };
+    rotation[3] = { 0, 0, 0, 1.0f };
 
-    return model;
+    glm::mat4 scale(1.0f);
+    scale[0][0] = 2.5f;
+    scale[1][1] = 2.5f;
+    scale[2][2] = 2.5f;
+
+
+    return rotation * scale;
 }
 
 glm::mat4 GetProjectionMatrix(float eye_fov, float aspect_ratio,
@@ -62,6 +69,18 @@ glm::mat4 GetProjectionMatrix(float eye_fov, float aspect_ratio,
     return projection;
 }
 
+glm::mat4 GetViewportMatrix(int width, int height)
+{
+    int w = width;
+    int h = height;
+    glm::mat4 viewportMatrix(1.0f);
+    viewportMatrix[0] = { w / 2.0f, 0, 0, 0 };
+    viewportMatrix[1] = { 0, h / 2.0f, 0, 0 };
+    viewportMatrix[2] = { 0, 0, 1.0f, 0 };
+    viewportMatrix[3] = { w / 2.0f, h / 2.0f, 0, 1.0f };
+    return viewportMatrix;
+}
+
 int Program::Init()
 {
     //Initialise GLFW, make sure it works. Put an error message here if you like.
@@ -70,7 +89,7 @@ int Program::Init()
 
     //Set resolution here, and give your window a different title.
 
-    window = glfwCreateWindow(700, 700, "OpenGL Boilerplate", nullptr, nullptr);
+    window = glfwCreateWindow(1400, 1400, "OpenGL Boilerplate", nullptr, nullptr);
     //GLFW_SCALE_TO_MONITOR;
     if (!window)
     {
@@ -86,7 +105,9 @@ int Program::Init()
     if (!gladLoadGL())
         return -1;
 
-    CPURenderer::CreateInstance(700, 700);
+    viewportSize = { 1400, 1400 };
+    CPURenderer* r = CPURenderer::CreateInstance(viewportSize.x, viewportSize.y);
+    r->SetClippingPlane(0.1, 50);
     InitGUI();
 }
 
@@ -94,25 +115,57 @@ void Program::Update()
 {
     CPURenderer* r = CPURenderer::GetInstance();
 
-    unsigned int indexBuffer = r->UploadVertices({
-        Vertex({{2, 0, -2, 1}, {217.0 / 255.0, 238.0 / 255.0, 185.0 / 255.0, 1}}),
-        Vertex({{0, 2, -2, 1}, {217.0 / 255.0, 238.0 / 255.0, 185.0 / 255.0, 1}}),
-        Vertex({{-2, 0, -2, 1}, {217.0 / 255.0, 238.0 / 255.0, 185.0 / 255.0, 1}}),
-        Vertex({{3.5, -1, -5, 1}, {185.0 / 255.0, 217.0 / 255.0, 238.0 / 255.0, 1}}),
-        Vertex({{2.5, 1.5, -5, 1}, {185.0 / 255.0, 217.0 / 255.0, 238.0 / 255.0, 1}}),
-        Vertex({{-1, 0.5, -5, 1}, {185.0 / 255.0, 217.0 / 255.0, 238.0 / 255.0, 1}})
-    });
+    float angles = 180;
+    Model* model = LoadModel("soulspear/soulspear.obj");
+    //r->fragmentShader = PhongFragmentShader;
+    r->vertexShader = NormalMapVertexShader;
+    r->fragmentShader = PhongNormalMapFragmentShader;
+    for (int i = 0; i < model->meshes.size(); i++)
+    {
+        r->UploadVertices(model->meshes[i].vertices);
+        r->UploadIndices(model->meshes[i].indices);
+    }
 
-    unsigned int vertexBuffer = r->UploadIndices({
-        0, 1, 2, 3, 4, 5
-        });
+    Texture* texture = new Texture("soulspear\\soulspear_diffuse.tga");
+    int diffuseId = r->UploadTexture(texture);
+    r->BindTextureUint(0, diffuseId);
 
-    r->SetUniform("modelMatrix", GetModelMatrix(0));
-    r->SetUniform("viewMatrix", GetViewMatrix({ 0, 0, 5 }));
-    r->SetUniform("projectionMatrix", GetProjectionMatrix(45, 1, 0.1, 50));
+    Texture* normalTexture = new Texture("soulspear\\soulspear_normal.tga");
+    int normalId = r->UploadTexture(normalTexture);
+    r->BindTextureUint(1, normalId);
+
+    Texture* specularTexture = new Texture("soulspear\\soulspear_specular.tga");
+    int specularId = r->UploadTexture(specularTexture);
+    r->BindTextureUint(2, specularId);
+
+    //unsigned char* color = texture->GetColor(0, 0);
+    //std::cout << (short)color[0] << ", " << (short)color[1] << ", " << (short)color[2] << std::endl;
+    
 
     while (!glfwWindowShouldClose(window))
     {
+        glfwPollEvents();
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+        {
+            angles -= 5;
+        }
+
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+        {
+            angles += 5;
+        }
+
+        glm::vec3 eyePos = { 0, 5, 30 };
+        r->SetUniform("modelMatrix", GetModelMatrix(angles));
+        r->SetUniform("viewMatrix", GetViewMatrix(eyePos));
+        r->SetUniform("projectionMatrix", GetProjectionMatrix(45, 1, 0.1, 50));
+        r->SetUniform("viewportMatrix", GetViewportMatrix(viewportSize.x, viewportSize.y));
+        r->SetUniform("diffuseTexture", 0);
+        r->SetUniform("normalTexture", 1);
+        r->SetUniform("specularTexture", 2);
+        r->SetUniform("eyePosition", eyePos);
+        //r->SetUniform("")
+        //r->SetUniform("spotTexture", )
         //Clear the screen ?eventually do rendering code here.
         glClear(GL_COLOR_BUFFER_BIT);
 
@@ -122,7 +175,6 @@ void Program::Update()
         glfwSwapBuffers(window);
 
         //Tell GLFW to check if anything is going on with input, etc.
-        glfwPollEvents();
     }
 }
 
